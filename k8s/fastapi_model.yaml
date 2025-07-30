@@ -1,0 +1,32 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: house-price-api
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: house-price-api
+  template:
+    metadata:
+      labels:
+        app: house-price-api
+    spec:
+      containers:
+      - name: house-price-api
+        image: docker.io/your-dockerhub-username/house-price-model:latest  # Overwritten by pipeline
+        ports:
+        - containerPort: 8000
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: house-price-api-service
+spec:
+  type: LoadBalancer
+  selector:
+    app: house-price-api
+  ports:
+  - protocol: TCP
+    port: 8000
+    targetPort: 8000

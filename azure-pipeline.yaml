@@ -1,0 +1,226 @@
+trigger: none  # Manual run only, like workflow_dispatch
+
+pr: none
+
+parameters:
+  - name: run_all
+    type: boolean
+    default: true
+  - name: run_data_processing
+    type: boolean
+    default: false
+  - name: run_model_training
+    type: boolean
+    default: false
+  - name: run_build_and_publish
+    type: boolean
+    default: false
+  - name: deploy_to_aks
+    type: boolean
+    default: false
+
+variables:
+  pythonVersion: '3.11.13'
+  dockerHubUsername: $(DOCKERHUB_USERNAME)
+  dockerHubToken: $(DOCKERHUB_TOKEN)
+
+stages:
+
+# -----------------------
+# 1. Data Processing Stage
+# -----------------------
+- stage: DataProcessing
+  condition: or(eq('${{ parameters.run_all }}', true), eq('${{ parameters.run_data_processing }}', true))
+  jobs:
+    - job: process_data
+      pool:
+        vmImage: 'ubuntu-latest'
+      steps:
+        - checkout: self
+
+        - task: UsePythonVersion@0
+          inputs:
+            versionSpec: '$(pythonVersion)'
+
+        - script: |
+            python -m pip install --upgrade pip
+            pip install -r requirements.txt
+          displayName: 'Install dependencies'
+
+        - script: |
+            python src/data/run_processing.py \
+              --input data/raw/house_data.csv \
+              --output data/processed/cleaned_house_data.csv
+            python src/features/engineer.py \
+              --input data/processed/cleaned_house_data.csv \
+              --output data/processed/featured_house_data.csv \
+              --preprocessor models/trained/preprocessor.pkl
+          displayName: 'Process and engineer features'
+
+        - task: PublishPipelineArtifact@1
+          inputs:
+            targetPath: 'data/processed/featured_house_data.csv'
+            artifact: processed-data
+
+        - task: PublishPipelineArtifact@1
+          inputs:
+            targetPath: 'models/trained/preprocessor.pkl'
+            artifact: preprocessor
+
+# -----------------------
+# 2. Model Training Stage
+# -----------------------
+- stage: ModelTraining
+  dependsOn: DataProcessing
+  condition: or(eq('${{ parameters.run_all }}', true), eq('${{ parameters.run_model_training }}', true))
+  jobs:
+    - job: train_model
+      pool:
+        vmImage: 'ubuntu-latest'
+      steps:
+        - checkout: self
+
+        - task: UsePythonVersion@0
+          inputs:
+            versionSpec: '$(pythonVersion)'
+
+        - script: |
+            python -m pip install --upgrade pip
+            pip install -r requirements.txt
+          displayName: 'Install dependencies'
+
+        - task: DownloadPipelineArtifact@2
+          inputs:
+            artifact: processed-data
+            path: data/processed/
+
+        - task: Docker@2
+          displayName: 'Start MLflow'
+          inputs:
+            command: run
+            arguments: >
+              -d -p 5000:5000 --name mlflow-server ghcr.io/mlflow/mlflow:latest
+              mlflow server --host 0.0.0.0
+              --backend-store-uri sqlite:///mlflow.db
+              --default-artifact-root /tmp/mlruns
+
+        - script: |
+            for i in {1..10}; do curl -f http://localhost:5000/health && break || sleep 5; done
+          displayName: 'Wait for MLflow'
+
+        - script: |
+            mkdir -p models
+            python src/models/train_model.py \
+              --config configs/model_config.yaml \
+              --data data/processed/featured_house_data.csv \
+              --models-dir models \
+              --mlflow-tracking-uri http://localhost:5000
+          displayName: 'Train model'
+
+        - task: PublishPipelineArtifact@1
+          inputs:
+            targetPath: 'models/'
+            artifact: trained-model
+
+        - script: |
+            docker stop mlflow-server || true
+            docker rm mlflow-server || true
+          displayName: 'Clean up MLflow'
+
+# -----------------------
+# 3. Build and Publish Stage
+# -----------------------
+- stage: BuildAndPublish
+  dependsOn: ModelTraining
+  condition: or(eq('${{ parameters.run_all }}', true), eq('${{ parameters.run_build_and_publish }}', true))
+  jobs:
+    - job: build_push_docker
+      pool:
+        vmImage: 'ubuntu-latest'
+      steps:
+        - checkout: self
+
+        - task: DownloadPipelineArtifact@2
+          inputs:
+            artifact: trained-model
+            path: models/
+
+        - task: DownloadPipelineArtifact@2
+          inputs:
+            artifact: preprocessor
+            path: models/trained/
+
+        - script: |
+            COMMIT_HASH=$(echo $(Build.SourceVersion) | cut -c1-7)
+            echo "Using commit hash: $COMMIT_HASH"
+            docker build -t docker.io/$(dockerHubUsername)/house-price-model:$COMMIT_HASH -f Dockerfile .
+            docker tag docker.io/$(dockerHubUsername)/house-price-model:$COMMIT_HASH docker.io/$(dockerHubUsername)/house-price-model:latest
+            docker run -d -p 8000:8000 --name test-api docker.io/$(dockerHubUsername)/house-price-model:$COMMIT_HASH
+            for i in {1..10}; do curl -f http://localhost:8000/health && break || sleep 5; done
+            docker logs test-api || true
+          displayName: 'Build and test Model with FastAPI Docker image'
+
+        - script: |
+            COMMIT_HASH=$(echo $(Build.SourceVersion) | cut -c1-7)
+            echo "Using commit hash: $COMMIT_HASH"
+            docker build -t docker.io/$(dockerHubUsername)/streamlit:$COMMIT_HASH -f ./streamlit_app/Dockerfile ./streamlit_app
+            docker tag docker.io/$(dockerHubUsername)/streamlit:$COMMIT_HASH docker.io/$(dockerHubUsername)/streamlit:latest
+            docker run -d -p 8501:8501 -e API_URL=http://fastapi:8000 --name test-streamlit docker.io/$(dockerHubUsername)/streamlit:$COMMIT_HASH
+            for i in {1..10}; do curl -f http://localhost:8501 && break || sleep 5; done
+            docker logs test-streamlit || true
+          displayName: 'Build and test Streamlit Docker image'
+
+        - script: |
+            docker stop test-api || true
+            docker rm test-api || true
+            docker stop test-streamlit || true
+            docker rm test-streamlit || true
+          displayName: 'Clean up test container'
+
+        - script: |
+            echo $(dockerHubToken) | docker login -u $(dockerHubUsername) --password-stdin
+            COMMIT_HASH=$(echo $(Build.SourceVersion) | cut -c1-7)
+            echo "Using commit hash: $COMMIT_HASH"
+            docker push docker.io/$(dockerHubUsername)/house-price-model:$COMMIT_HASH
+            docker push docker.io/$(dockerHubUsername)/house-price-model:latest
+            docker push docker.io/$(dockerHubUsername)/streamlit:$COMMIT_HASH
+            docker push docker.io/$(dockerHubUsername)/streamlit:latest
+          displayName: 'Push Docker image'
+
+# -----------------------
+# 3. Deploy to AKS Stage
+# -----------------------
+- stage: DeployToAKS
+  displayName: 'Deploy to AKS'
+  dependsOn: BuildAndPublish
+  condition: succeeded()
+  jobs:
+    - job: DeployJob
+      displayName: 'Deploy Docker image to AKS'
+      pool:
+        vmImage: 'ubuntu-latest'
+      steps:
+
+        - checkout: self
+
+        - task: AzureCLI@2
+          inputs:
+            azureSubscription: 'uamanagedidentity'
+            scriptType: 'bash'
+            scriptLocation: 'inlineScript'
+            inlineScript: |
+              # Set AKS context
+              az aks get-credentials --resource-group rg-surajthakur-ai --name aks_mlops --overwrite-existing
+
+              # Use the same commit hash tag from previous stage
+              COMMIT_HASH=$(echo $(Build.SourceVersion) | cut -c1-7)
+              echo "Using image tag: $COMMIT_HASH"
+
+              # Update image tag in Kubernetes deployment YAML
+              sed -i "s|image: .*|image: docker.io/$(dockerHubUsername)/streamlit:$COMMIT_HASH|g" k8s/deployment.yaml
+              sed -i "s|image: .*|image: docker.io/$(dockerHubUsername)/house-price-model:$COMMIT_HASH|g" k8s/fastapi_model.yaml
+
+              # Apply to Kubernetes
+              kubectl apply -f k8s/deployment.yaml
+              kubectl apply -f k8s/fastapi_model.yaml 
+          displayName: 'Deploy updated image to AKS'
