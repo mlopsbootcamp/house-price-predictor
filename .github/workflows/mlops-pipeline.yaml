@@ -1,0 +1,158 @@
+name: MLOps Pipeline
+
+on:
+  workflow_dispatch:
+    inputs:
+      run_all:
+        description: 'Run all jobs'
+        required: false
+        default: 'true'
+      run_data_processing:
+        description: 'Run data processing job'
+        required: false
+        default: 'false'
+      run_model_training:
+        description: 'Run model training job'
+        required: false
+        default: 'false'
+      run_build_and_publish:
+        description: 'Run build and publish job'
+        required: false
+        default: 'false'
+
+  release:
+    types: [created]
+    branches: [main]
+    tags: ['v*.*.*']
+
+# Uncomment if you want push or pull_request triggers instead of workflow_dispatch
+# on:
+#   push:
+#     branches: [main]
+#     tags: ['v*.*.*']
+#   pull_request:
+#     branches: [main]
+
+jobs:
+  data-processing:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v2
+
+      - name: Set up Python
+        uses: actions/setup-python@v2
+        with:
+          python-version: '3.11.9'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Process data
+        run: |
+          python src/data/run_processing.py --input data/raw/house_data.csv --output data/processed/cleaned_house_data.csv
+
+      - name: Engineer features
+        run: |
+          python src/features/engineer.py --input data/processed/cleaned_house_data.csv --output data/processed/featured_house_data.csv --preprocessor models/trained/preprocessor.pkl
+
+      - name: Upload processed data
+        uses: actions/upload-artifact@v4
+        with:
+          name: processed-data
+          path: data/processed/featured_house_data.csv
+
+      - name: Upload preprocessor
+        uses: actions/upload-artifact@v4
+        with:
+          name: preprocessor
+          path: models/trained/preprocessor.pkl
+
+  model-training:
+    needs: data-processing
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v2
+
+      - name: Set up Python
+        uses: actions/setup-python@v2
+        with:
+          python-version: '3.11.9'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Download processed data
+        uses: actions/download-artifact@v4
+        with:
+          name: processed-data
+          path: data/processed/
+
+      - name: Set up MLflow
+        run: |
+          docker pull ghcr.io/mlflow/mlflow:latest
+          docker run -d -p 5000:5000 --name mlflow-server ghcr.io/mlflow/mlflow:latest mlflow server --host 0.0.0.0 --backend-store-uri sqlite:///mlflow.db
+
+      - name: Wait for MLflow to start
+        run: |
+          for i in {1..10}; do
+            curl -f http://localhost:5000/health || sleep 5;
+          done
+
+      - name: Train model
+        run: |
+          mkdir -p models
+          python src/models/train_model.py --config configs/model_config.yaml --data data/processed/featured_house_data.csv --models-dir models --mlflow-tracking-uri http://localhost:5000
+
+      - name: Upload trained model
+        uses: actions/upload-artifact@v4
+        with:
+          name: trained-model
+          path: models/
+
+      - name: Clean up MLflow
+        run: |
+          docker stop mlflow-server || true
+          docker rm mlflow-server || true
+
+  build-and-publish:
+    needs: model-training
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v2
+
+      - name: Download trained model
+        uses: actions/download-artifact@v4
+        with:
+          name: trained-model
+          path: models/
+
+      - name: Download preprocessor
+        uses: actions/download-artifact@v4
+        with:
+          name: preprocessor
+          path: models/trained/
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to DockerHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: docker.io
+          username: ${{ vars.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Build and push Docker image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: ./Dockerfile
+          push: true
+          tags: docker.io/${{ vars.DOCKERHUB_USERNAME }}/house-price-model:v2

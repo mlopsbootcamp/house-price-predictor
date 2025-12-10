@@ -2,6 +2,10 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from inference import predict_price, batch_predict
 from schemas import HousePredictionRequest, PredictionResponse
+from prometheus_fastapi_instrumentator import Instrumentator
+from prometheus_client import start_http_server
+import threading
+from typing import List
 
 # Initialize FastAPI app with metadata
 app = FastAPI(
@@ -32,6 +36,15 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# Initialize and instrument Prometheus metrics
+Instrumentator().instrument(app).expose(app)
+
+# Start Prometheus metrics server on port 9100 in a background thread
+def start_metrics_server():
+    start_http_server(9100)
+
+threading.Thread(target=start_metrics_server, daemon=True).start()
+
 # Health check endpoint
 @app.get("/health", response_model=dict)
 async def health_check():
@@ -43,6 +56,6 @@ async def predict(request: HousePredictionRequest):
     return predict_price(request)
 
 # Batch prediction endpoint
-@app.post("/batch-predict", response_model=list)
-async def batch_predict_endpoint(requests: list[HousePredictionRequest]):
+@app.post("/batch-predict", response_model=List[PredictionResponse])
+async def batch_predict_endpoint(requests: List[HousePredictionRequest]):
     return batch_predict(requests)
