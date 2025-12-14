@@ -1,0 +1,16 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: house-price-ui
+  namespace: house-price
+  labels:
+    app: house-price-ui
+spec:
+  type: ClusterIP
+  ports:
+    - port: 8501
+      targetPort: 8501
+      protocol: TCP
+      name: http
+  selector:
+    app: house-price-ui

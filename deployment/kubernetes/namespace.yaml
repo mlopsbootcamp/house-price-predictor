@@ -1,0 +1,7 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: house-price
+  labels:
+    app.kubernetes.io/name: house-price-predictor
+    app.kubernetes.io/managed-by: argocd
