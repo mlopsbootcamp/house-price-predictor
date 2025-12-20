@@ -1,0 +1,46 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: house-price-ui
+  namespace: house-price
+  labels:
+    app: house-price-ui
+    component: frontend
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: house-price-ui
+  template:
+    metadata:
+      labels:
+        app: house-price-ui
+    spec:
+      containers:
+        - name: streamlit
+          image: ghcr.io/hidrochin/it5414-house-price-predictor/house-price-ui:latest
+          ports:
+            - containerPort: 8501
+              name: http
+          env:
+            - name: API_URL
+              value: "http://house-price-api:8000"
+          resources:
+            requests:
+              cpu: "50m"
+              memory: "128Mi"
+            limits:
+              cpu: "200m"
+              memory: "256Mi"
+          livenessProbe:
+            httpGet:
+              path: /_stcore/health
+              port: 8501
+            initialDelaySeconds: 30
+            periodSeconds: 10
+          readinessProbe:
+            httpGet:
+              path: /_stcore/health
+              port: 8501
+            initialDelaySeconds: 5
+            periodSeconds: 5

@@ -17,7 +17,7 @@ st.title("House Price Prediction")
 st.markdown(
     """
     <p style="font-size: 18px; color: gray;">
-        A simple MLOps demonstration project for real-time house price prediction
+        IT5414 Machine Learning - House Price Prediction Project
     </p>
     """,
     unsafe_allow_html=True,
@@ -177,8 +177,8 @@ st.markdown("<hr>", unsafe_allow_html=True)  # Add a horizontal line for separat
 st.markdown(
     f"""
     <div style="text-align: center; color: gray; margin-top: 20px;">
-        <p><strong>Built for MLOps Bootcamp</strong></p>
-        <p>by <a href="https://www.schoolofdevops.com" target="_blank">School of Devops</a></p>
+        <p><strong>IT5414 Machine Learning Project</strong></p>
+        <p>House Price Prediction with MLOps</p>
         <p><strong>Version:</strong> {version}</p>
         <p><strong>Hostname:</strong> {hostname}</p>
         <p><strong>IP Address:</strong> {ip_address}</p>

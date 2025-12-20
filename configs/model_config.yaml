@@ -1,0 +1,40 @@
+model:
+  name: house_price_model
+  best_model: GradientBoosting
+  target_variable: price
+  feature_sets:
+    rfe:
+    - '0'
+    - '1'
+    - '2'
+    - '3'
+    - '4'
+    - '5'
+    - '9'
+    - '10'
+    - '13'
+    - '14'
+  mae: 6879.372190627382
+  r2_score: 0.9985059499385691
+  parameters:
+    alpha: 0.9
+    ccp_alpha: 0.0
+    criterion: friedman_mse
+    init: null
+    learning_rate: 0.1
+    loss: squared_error
+    max_depth: 3
+    max_features: null
+    max_leaf_nodes: null
+    min_impurity_decrease: 0.0
+    min_samples_leaf: 1
+    min_samples_split: 2
+    min_weight_fraction_leaf: 0.0
+    n_estimators: 300
+    n_iter_no_change: null
+    random_state: 42
+    subsample: 1.0
+    tol: 0.0001
+    validation_fraction: 0.1
+    verbose: 0
+    warm_start: false

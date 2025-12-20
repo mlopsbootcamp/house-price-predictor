@@ -1,187 +1,210 @@
-# 🏠 House Price Predictor – An MLOps Learning Project
+# 🏠 IT5414 - House Price Predictor
 
-Welcome to the **House Price Predictor** project! This is a real-world, end-to-end MLOps use case designed to help you master the art of building and operationalizing machine learning pipelines.
-
-You'll start from raw data and move through data preprocessing, feature engineering, experimentation, model tracking with MLflow, and optionally using Jupyter for exploration – all while applying industry-grade tooling.
-
-> 🚀 **Want to master MLOps from scratch?**  
-Check out the [MLOps Bootcamp at School of DevOps](https://schoolofdevops.com) to level up your skills.
+Dự án Machine Learning end-to-end dự đoán giá nhà, áp dụng các nguyên tắc MLOps.
 
 ---
 
-## 📦 Project Structure
+## 📦 Cấu trúc dự án
 
 ```
-house-price-predictor/
-├── configs/                # YAML-based configuration for models
-├── data/                   # Raw and processed datasets
+IT5414-house-price-predictor/
+├── configs/                    # Cấu hình model
+│   └── model_config.yaml
+├── data/
+│   ├── raw/                    # Dữ liệu gốc
+│   └── processed/              # Dữ liệu đã xử lý
 ├── deployment/
-│   └── mlflow/             # Docker Compose setup for MLflow
-├── models/                 # Trained models and preprocessors
-├── notebooks/              # Optional Jupyter notebooks for experimentation
+│   └── mlflow/                 # Docker Compose cho MLflow
+├── models/
+│   └── trained/                # Model và preprocessor đã train
+├── notebooks/                  # Jupyter notebooks thử nghiệm
 ├── src/
-│   ├── data/               # Data cleaning and preprocessing scripts
-│   ├── features/           # Feature engineering pipeline
-│   ├── models/             # Model training and evaluation
-├── requirements.txt        # Python dependencies
-└── README.md               # You’re here!
+│   ├── api/                    # FastAPI backend
+│   ├── data/                   # Script xử lý dữ liệu
+│   ├── features/               # Feature engineering
+│   └── models/                 # Training scripts
+├── streamlit_app/              # Giao diện Streamlit
+├── Dockerfile                  # Docker cho FastAPI
+├── docker-compose.yaml         # Orchestration
+└── requirements.txt
 ```
 
 ---
 
-## 🛠️ Setting up Learning/Development Environment
+## 🛠️ Yêu cầu hệ thống
 
-To begin, ensure the following tools are installed on your system:
-
-- [Python 3.11](https://www.python.org/downloads/)
-- [Git](https://git-scm.com/)
-- [Visual Studio Code](https://code.visualstudio.com/) or your preferred editor
-- [UV – Python package and environment manager](https://github.com/astral-sh/uv)
-- [Docker Desktop](https://www.docker.com/products/docker-desktop/) **or** [Podman Desktop](https://podman-desktop.io/)
+- **Python**: 3.10 hoặc 3.11
+- **Docker Desktop**: [Download](https://www.docker.com/products/docker-desktop/)
+- **Git**: [Download](https://git-scm.com/)
+- **Anaconda/Miniconda** (khuyến nghị): [Download](https://docs.conda.io/en/latest/miniconda.html)
 
 ---
 
-## 🚀 Preparing Your Environment
+## 🚀 Hướng dẫn cài đặt và chạy
 
-1. **Fork this repo** on GitHub.
+### Bước 1: Clone repository
 
-2. **Clone your forked copy:**
+```bash
+git clone https://github.com/hidrochin/IT5414-house-price-predictor
+cd IT5414-house-price-predictor
+```
 
-   ```bash
-   # Replace xxxxxx with your GitHub username or org
-   git clone https://github.com/xxxxxx/house-price-predictor.git
-   cd house-price-predictor
-   ```
+### Bước 2: Tạo môi trường Python
 
-3. **Setup Python Virtual Environment using UV:**
+```bash
+# Sử dụng Conda (khuyến nghị)
+conda create -n it5414 python=3.10
+conda activate it5414
 
-   ```bash
-   uv venv --python python3.11
-   source .venv/bin/activate
-   ```
+# Cài đặt dependencies
+pip install -r requirements.txt
+```
 
-4. **Install dependencies:**
+### Bước 3: Cài đặt Docker Desktop
 
-   ```bash
-   uv pip install -r requirements.txt
-   ```
+1. Tải Docker Desktop tại https://www.docker.com/products/docker-desktop/
+2. Chọn **Download for Windows – AMD64**
+3. Cài đặt với tùy chọn **Use WSL 2**
+4. Khởi động Docker Desktop
+5. Kiểm tra: `docker --version`
 
----
-
-## 📊 Setup MLflow for Experiment Tracking
-
-To track experiments and model runs:
+### Bước 4: Khởi động MLflow
 
 ```bash
 cd deployment/mlflow
-docker compose -f mlflow-docker-compose.yml up -d
-docker compose ps
+docker compose up -d
 ```
 
-> 🐧 **Using Podman?** Use this instead:
+Truy cập MLflow UI: http://localhost:5555
+
+### Bước 5: Training Model
 
 ```bash
-podman compose -f mlflow-docker-compose.yml up -d
-podman compose ps
+# Quay lại thư mục gốc
+cd ../..
+
+# 1. Xử lý dữ liệu
+python src/data/run_processing.py \
+  --input data/raw/house_data.csv \
+  --output data/processed/cleaned_house_data.csv
+
+# 2. Feature engineering
+python src/features/engineer.py \
+  --input data/processed/cleaned_house_data.csv \
+  --output data/processed/featured_house_data.csv \
+  --preprocessor models/trained/preprocessor.pkl
+
+# 3. Train model
+python src/models/train_model.py \
+  --config configs/model_config.yaml \
+  --data data/processed/featured_house_data.csv \
+  --models-dir models \
+  --mlflow-tracking-uri http://localhost:5555
 ```
 
-Access the MLflow UI at [http://localhost:5555](http://localhost:5555)
-
----
-
-## 📒 Using JupyterLab (Optional)
-
-If you prefer an interactive experience, launch JupyterLab with:
+### Bước 6: Chạy ứng dụng với Docker
 
 ```bash
-uv python -m jupyterlab
-# or
-python -m jupyterlab
-```
+# Build và khởi động
+docker compose up -d
 
----
-
-## 🔁 Model Workflow
-
-### 🧹 Step 1: Data Processing
-
-Clean and preprocess the raw housing dataset:
-
-```bash
-python src/data/run_processing.py   --input data/raw/house_data.csv   --output data/processed/cleaned_house_data.csv
-```
-
----
-
-### 🧠 Step 2: Feature Engineering
-
-Apply transformations and generate features:
-
-```bash
-python src/features/engineer.py   --input data/processed/cleaned_house_data.csv   --output data/processed/featured_house_data.csv   --preprocessor models/trained/preprocessor.pkl
+# Kiểm tra trạng thái
+docker ps
 ```
 
 ---
 
-### 📈 Step 3: Modeling & Experimentation
+## 🌐 Truy cập ứng dụng
 
-Train your model and log everything to MLflow:
-
-```bash
-python src/models/train_model.py   --config configs/model_config.yaml   --data data/processed/featured_house_data.csv   --models-dir models   --mlflow-tracking-uri http://localhost:5555
-```
+| Dịch vụ | URL | Mô tả |
+|---------|-----|-------|
+| **Streamlit UI** | http://localhost:8501 | Giao diện người dùng |
+| **FastAPI** | http://localhost:8000 | REST API |
+| **API Docs** | http://localhost:8000/docs | Swagger documentation |
+| **MLflow** | http://localhost:5555 | Experiment tracking |
 
 ---
 
+## 📡 Sử dụng API
 
-## Building FastAPI and Streamlit 
+### Health Check
 
-The code for both the apps are available in `src/api` and `streamlit_app` already. To build and launch these apps 
-
-  * Add a  `Dockerfile` in the root of the source code for building FastAPI  
-  * Add `streamlit_app/Dockerfile` to package and build the Streamlit app  
-  * Add `docker-compose.yaml` in the root path to launch both these apps. be sure to provide `API_URL=http://fastapi:8000` in the streamlit app's environment. 
-
-
-Once you have launched both the apps, you should be able to access streamlit web ui and make predictions. 
-
-You could also test predictions with FastAPI directly using 
-
+```bash
+curl http://localhost:8000/health
 ```
+
+### Dự đoán giá nhà
+
+```bash
 curl -X POST "http://localhost:8000/predict" \
--H "Content-Type: application/json" \
--d '{
-  "sqft": 1500,
-  "bedrooms": 3,
-  "bathrooms": 2,
-  "location": "suburban",
-  "year_built": 2000,
-  "condition": fair
-}'
-
+  -H "Content-Type: application/json" \
+  -d '{
+    "sqft": 1500,
+    "bedrooms": 3,
+    "bathrooms": 2,
+    "location": "suburban",
+    "year_built": 2000,
+    "condition": "Good"
+  }'
 ```
 
-Be sure to replace `http://localhost:8000/predict` with actual endpoint based on where its running. 
-
-
-## 🧠 Learn More About MLOps
-
-This project is part of the [**MLOps Bootcamp**](https://schoolofdevops.com) at School of DevOps, where you'll learn how to:
-
-- Build and track ML pipelines
-- Containerize and deploy models
-- Automate training workflows using GitHub Actions or Argo Workflows
-- Apply DevOps principles to Machine Learning systems
-
-🔗 [Get Started with MLOps →](https://schoolofdevops.com)
+**Response:**
+```json
+{
+  "predicted_price": 382536.69,
+  "confidence_interval": [344283.02, 420790.36],
+  "features_importance": {},
+  "prediction_time": "2025-12-14T03:45:41"
+}
+```
 
 ---
 
-## 🤝 Contributing
+## 🔄 Quản lý Docker
 
-We welcome contributions, issues, and suggestions to make this project even better. Feel free to fork, explore, and raise PRs!
+```bash
+# Xem logs
+docker compose logs -f
+
+# Dừng tất cả containers
+docker compose down
+
+# Rebuild sau khi sửa code
+docker compose build
+docker compose up -d
+```
 
 ---
 
-Happy Learning!  
-— Team **School of DevOps**
+## 📁 Các file quan trọng
+
+| File | Mô tả |
+|------|-------|
+| `Dockerfile` | Build FastAPI backend |
+| `streamlit_app/Dockerfile` | Build Streamlit frontend |
+| `docker-compose.yaml` | Orchestrate cả 2 services |
+| `configs/model_config.yaml` | Cấu hình model (algorithm, hyperparameters) |
+| `models/trained/house_price_model.pkl` | Model đã train |
+| `models/trained/preprocessor.pkl` | Preprocessor cho features |
+
+---
+
+## 🧪 Model Performance
+
+- **Algorithm**: XGBoost
+- **MAE**: 17,497.87
+- **R² Score**: 0.9779
+
+---
+
+## 👨‍💻 Thành viên nhóm
+
+
+
+## 📝 License
+
+MIT License - Xem file [LICENSE](LICENSE) để biết thêm chi tiết.
+
+---
+
+**IT5414 - Machine Learning Course Project**
