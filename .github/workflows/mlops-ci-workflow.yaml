@@ -33,7 +33,7 @@ jobs:
 
       - name: Run Data Processing Test
         run: |
-            python src/data_processing.py \
+            python src/data/run_processing.py \
               --input data/raw/house_data.csv \
               --output data/processed/cleaned_house_data.csv
       
