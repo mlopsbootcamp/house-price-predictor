@@ -30,3 +30,24 @@ jobs:
       - name: Run tests
         run: |
           pytest || [ $? -eq 5 ]
+
+      - name: Run Data Processing Test
+        run: |
+            python src/data_processing.py \
+              --input data/raw/house_data.csv \
+              --output data/processed/cleaned_house_data.csv
+      
+      - name: Do Feature Engineeering Test
+        run: |
+            python src/feature_engineering.py \
+              --input data/processed/cleaned_house_data.csv \
+              --output data/features/engineered_features.csv
+      
+      - name: Train the Model  
+        run: |
+            python src/models/train_model.py \
+              --config configs/model_config.yaml \
+              --data data/processed/featured_house_data.csv \
+              --models-dir models \
+              --mlflow-tracking-uri http://localhost:5000
+            
