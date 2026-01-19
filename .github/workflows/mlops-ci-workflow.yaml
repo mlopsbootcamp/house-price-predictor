@@ -41,7 +41,8 @@ jobs:
         run: |
             python src/features/engineer.py \
               --input data/processed/cleaned_house_data.csv \
-              --output data/features/engineered_features.csv
+              --output data/features/engineered_features.csv \
+              --preprocessor models/preprocessor.pkl
       
       - name: Train the Model  
         run: |
