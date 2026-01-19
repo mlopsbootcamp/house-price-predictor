@@ -1,14 +1,32 @@
 # yaml-language-server: $schema=https://json.schemastore.org/github-workflow.json
-name: MLops CI
+
+name: MLOps CI
 
 on:
-    push:
-        branches:
-            - main
-    pull_request:
-        branches:
-            - main
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+jobs:
+  workflow:
+    runs-on: ubuntu-latest
 
-jobs: 
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v5
 
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.11.9"
 
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Run tests
+        run: |
+          pytest
