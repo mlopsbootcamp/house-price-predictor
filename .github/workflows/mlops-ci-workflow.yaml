@@ -81,5 +81,5 @@ jobs:
         with:
           push: true
           tags: joevisco/fastapi:${{ github.sha }}
-          context: ".'"
+          context: .
           file: "Dockerfile"
