@@ -1,0 +1,56 @@
+name: MLops CI
+
+
+on: 
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+
+jobs:
+  workflow:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v2
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: 3.11.5
+      
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+      
+      - name: Run Data Processing
+        run: |
+          python src/data/run_processing.py \
+            --input data/raw/house_data.csv \
+            --output data/processed/cleaned_house_data.csv
+
+      - name: Do Feature Engineering
+        run: |
+          python src/features/engineer.py \
+            --input data/processed/cleaned_house_data.csv \
+            --output data/processed/featured_house_data.csv \
+            --preprocessor models/trained/preprocessor.pkl
+      
+      - name: Setup MLflow
+        run: |
+          docker compose -f deployment/mlflow/docker-compose.yaml up -d
+
+      - name: Train the Model
+        run: |
+          python src/models/train_model.py \
+            --config configs/model_config.yaml \
+            --data data/processed/featured_house_data.csv \
+            --models-dir models \
+            --mlflow-tracking-uri http://localhost:5555
+      
+      - name: Cleanup MLflow
+        run: |
+          docker compose -f deployment/mlflow/docker-compose.yaml down
