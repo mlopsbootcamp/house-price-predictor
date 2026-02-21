@@ -48,7 +48,7 @@ def create_preprocessor():
     
     # Define feature groups
     categorical_features = ['location', 'condition']
-    numerical_features = ['sqft', 'bedrooms', 'bathrooms', 'house_age', 'price_per_sqft', 'bed_bath_ratio']
+    numerical_features = ['sqft', 'bedrooms', 'bathrooms', 'house_age', 'bed_bath_ratio']
     
     # Preprocessing for numerical features
     numerical_transformer = Pipeline(steps=[
@@ -80,25 +80,11 @@ def run_feature_engineering(input_file, output_file, preprocessor_file):
     df_featured = create_features(df)
     logger.info(f"Created featured dataset with shape: {df_featured.shape}")
     
-    # Create and fit the preprocessor
-    preprocessor = create_preprocessor()
-    X = df_featured.drop(columns=['price'], errors='ignore')  # Features only
-    y = df_featured['price'] if 'price' in df_featured.columns else None  # Target column (if available)
-    X_transformed = preprocessor.fit_transform(X)
-    logger.info("Fitted the preprocessor and transformed the features")
+    # Save the engineered data (with named columns)
+    df_featured.to_csv(output_file, index=False)
+    logger.info(f"Saved engineered features to {output_file}")
     
-    # Save the preprocessor
-    joblib.dump(preprocessor, preprocessor_file)
-    logger.info(f"Saved preprocessor to {preprocessor_file}")
-    
-    # Save fully preprocessed data
-    df_transformed = pd.DataFrame(X_transformed)
-    if y is not None:
-        df_transformed['price'] = y.values
-    df_transformed.to_csv(output_file, index=False)
-    logger.info(f"Saved fully preprocessed data to {output_file}")
-    
-    return df_transformed
+    return df_featured
 
 if __name__ == "__main__":
     import argparse

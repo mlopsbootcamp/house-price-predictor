@@ -14,6 +14,10 @@ import logging
 from mlflow.tracking import MlflowClient
 import platform
 import sklearn
+import sys
+import os
+sys.path.append(os.path.join(os.getcwd(), 'src'))
+from features.engineer import create_preprocessor
 
 # -----------------------------
 # Configure logging
@@ -63,8 +67,9 @@ def main(args):
     data = pd.read_csv(args.data)
     target = model_cfg['target_variable']
 
-    # Use all features except the target variable
-    X = data.drop(columns=[target])
+    # Use features defined in the config (rfe set)
+    feature_set = model_cfg['feature_sets']['rfe']
+    X = data[feature_set]
     y = data[target]
     X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
 
@@ -74,8 +79,21 @@ def main(args):
     # Start MLflow run
     with mlflow.start_run(run_name="final_training"):
         logger.info(f"Training model: {model_cfg['best_model']}")
-        model.fit(X_train, y_train)
-        y_pred = model.predict(X_test)
+        
+        # Preprocessing
+        preprocessor = create_preprocessor()
+        X_train_transformed = preprocessor.fit_transform(X_train)
+        X_test_transformed = preprocessor.transform(X_test)
+        
+        # Save preprocessor
+        preprocessor_path = f"{args.models_dir}/trained/preprocessor.pkl"
+        os.makedirs(os.path.dirname(preprocessor_path), exist_ok=True)
+        joblib.dump(preprocessor, preprocessor_path)
+        logger.info(f"Saved fitted preprocessor to: {preprocessor_path}")
+
+        # Train model
+        model.fit(X_train_transformed, y_train)
+        y_pred = model.predict(X_test_transformed)
 
         mae = float(mean_absolute_error(y_test, y_pred))
         r2 = float(r2_score(y_test, y_pred))
@@ -93,7 +111,7 @@ def main(args):
         client = MlflowClient()
         try:
             client.create_registered_model(model_name)
-        except mlflow.exceptions.RestException:
+        except Exception:
             pass  # already exists
 
         model_version = client.create_model_version(

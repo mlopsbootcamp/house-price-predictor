@@ -1,0 +1,19 @@
+model:
+  name: house_price_model
+  best_model: RandomForest
+  parameters:
+    n_estimators: 100
+    max_depth: 10
+  r2_score: 0.90 # Placeholder from experimentation
+  mae: 15000.0 # Placeholder from experimentation
+  target_variable: price
+  feature_sets:
+    rfe:
+      - sqft
+      - bedrooms
+      - bathrooms
+      - year_built
+      - house_age
+      - bed_bath_ratio
+      - location
+      - condition

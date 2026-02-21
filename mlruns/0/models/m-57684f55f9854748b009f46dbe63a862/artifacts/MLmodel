@@ -1,0 +1,23 @@
+artifact_path: /home/benja/Escritorio/work/mlops/MLOps-Project/mlruns/0/models/m-57684f55f9854748b009f46dbe63a862/artifacts
+flavors:
+  python_function:
+    env:
+      conda: conda.yaml
+      virtualenv: python_env.yaml
+    loader_module: mlflow.sklearn
+    model_path: model.pkl
+    predict_fn: predict
+    python_version: 3.13.7
+  sklearn:
+    code: null
+    pickled_model: model.pkl
+    serialization_format: cloudpickle
+    sklearn_version: 1.8.0
+    skops_trusted_types: null
+mlflow_version: 3.9.0
+model_id: m-57684f55f9854748b009f46dbe63a862
+model_size_bytes: 613027
+model_uuid: m-57684f55f9854748b009f46dbe63a862
+prompts: null
+run_id: 54dd81d789dd45d7a70bd0b3456bfe9f
+utc_time_created: '2026-02-19 12:41:48.651927'

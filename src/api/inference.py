@@ -1,11 +1,12 @@
+import os
 import joblib
 import pandas as pd
 from datetime import datetime
-from schemas import HousePredictionRequest, PredictionResponse
+from src.api.schemas import HousePredictionRequest, PredictionResponse
 
 # Load model and preprocessor
-MODEL_PATH = "models/trained/house_price_model.pkl"
-PREPROCESSOR_PATH = "models/trained/preprocessor.pkl"
+MODEL_PATH = os.getenv("MODEL_PATH", "models/trained/house_price_model.pkl")
+PREPROCESSOR_PATH = os.getenv("PREPROCESSOR_PATH", "models/trained/preprocessor.pkl")
 
 try:
     model = joblib.load(MODEL_PATH)
@@ -21,7 +22,6 @@ def predict_price(request: HousePredictionRequest) -> PredictionResponse:
     input_data = pd.DataFrame([request.dict()])
     input_data['house_age'] = datetime.now().year - input_data['year_built']
     input_data['bed_bath_ratio'] = input_data['bedrooms'] / input_data['bathrooms']
-    input_data['price_per_sqft'] = 0  # Dummy value for compatibility
 
     # Preprocess input data
     processed_features = preprocessor.transform(input_data)
@@ -52,7 +52,6 @@ def batch_predict(requests: list[HousePredictionRequest]) -> list[float]:
     input_data = pd.DataFrame([req.dict() for req in requests])
     input_data['house_age'] = datetime.now().year - input_data['year_built']
     input_data['bed_bath_ratio'] = input_data['bedrooms'] / input_data['bathrooms']
-    input_data['price_per_sqft'] = 0  # Dummy value for compatibility
 
     # Preprocess input data
     processed_features = preprocessor.transform(input_data)

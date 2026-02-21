@@ -1,0 +1,21 @@
+services:
+  api:
+    build: .
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./models/trained:/app/models/trained
+    environment:
+      - PYTHONPATH=/app
+    restart: always
+
+  frontend:
+    build:
+      context: ./streamlit_app
+    ports:
+      - "8501:8501"
+    environment:
+      - API_URL=http://api:8000
+    depends_on:
+      - api
+    restart: always
