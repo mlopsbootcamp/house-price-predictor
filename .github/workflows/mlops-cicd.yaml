@@ -1,0 +1,60 @@
+name: CI-CD Pipeline
+
+on:
+  push:
+    branches:
+      - main
+jobs:
+  # =============================
+  # JOB 1: Build & Push Images
+  # =============================
+  build:
+    name: Build & Push to DockerHub
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    # 2️⃣ Login to DockerHub
+    - name: Login to DockerHub
+      uses: docker/login-action@v2
+      with:
+        username: ${{ secrets.DOCKER_USERNAME }}
+        password: ${{ secrets.DOCKER_PASSWORD }}
+
+    # 3️⃣ Build API image
+    - name: Build API Docker image
+      run: |
+        docker build -t ${{ secrets.DOCKER_USERNAME }}/loksai-mlops830api:latest -f docker/Dockerfile.api .
+    # 4️⃣ Build UI image
+    - name: Build UI Docker image
+      run: |
+        docker build -t ${{ secrets.DOCKER_USERNAME }}/loksai-mlops830ui:latest -f docker/Dockerfile.ui .
+    # 5️⃣ Push API image
+    - name: Push API image
+      run: |
+        docker push ${{ secrets.DOCKER_USERNAME }}/loksai-mlops830api:latest
+    # 6️⃣ Push UI image
+    - name: Push UI image
+      run: |
+        docker push ${{ secrets.DOCKER_USERNAME }}/loksai-mlops830ui:latest
+  # =============================
+  # JOB 2: Deploy to Kubernetes
+  # =============================
+  deploy:  
+    name: Deploy to Kubernetes
+    runs-on: self-hosted
+    needs: build
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Setup kubectl
+      run: |
+        mkdir -p ~/.kube
+        echo "${{ secrets.USER_KUBE_CONFIG_DATA }}" > ~/.kube/config
+    - name: Deploy to Kubernetes
+      run: |
+        kubectl apply -f k8s/api-deployment.yaml
