@@ -1,0 +1,24 @@
+model:
+  best_model: LinearRegression
+  feature_sets:
+    rfe:
+    - '0'
+    - '2'
+    - '3'
+    - '4'
+    - '5'
+    - '6'
+    - '9'
+    - '10'
+    - '13'
+    - '14'
+  mae: 26073.89885702498
+  name: house_price_model
+  parameters:
+    copy_X: true
+    fit_intercept: true
+    n_jobs: null
+    positive: false
+    
+  r2_score: 0.9842144543759883
+  target_variable: price

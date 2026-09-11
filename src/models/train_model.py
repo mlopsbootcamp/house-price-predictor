@@ -1,3 +1,4 @@
+import os 
 import argparse
 import pandas as pd
 import numpy as np
@@ -145,6 +146,7 @@ def main(args):
 
         # Save model locally
         save_path = f"{args.models_dir}/trained/{model_name}.pkl"
+        os.makedirs(os.path.dirname(save_path), exist_ok=True)
         joblib.dump(model, save_path)
         logger.info(f"Saved trained model to: {save_path}")
         logger.info(f"Final MAE: {mae:.2f}, R²: {r2:.4f}")
