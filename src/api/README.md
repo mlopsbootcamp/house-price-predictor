@@ -1,6 +1,6 @@
 ## Intructions to build Container Image for this FastAPI App 
 
-Create the Dockerfile in the root of the source code (`house-prcice-predictor`). 
+Create the Dockerfile in the root of the source code (`house-price-predictor`). 
 
 Following is all the information you would need to start building the container image for this app 
 
