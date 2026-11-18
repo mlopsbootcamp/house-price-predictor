@@ -133,6 +133,37 @@ python src/models/train_model.py   --config configs/model_config.yaml   --data d
 
 ---
 
+
+## Building FastAPI and Streamlit 
+
+The code for both the apps are available in `src/api` and `streamlit_app` already. To build and launch these apps 
+
+  * Add a  `Dockerfile` in the root of the source code for building FastAPI  
+  * Add `streamlit_app/Dockerfile` to package and build the Streamlit app  
+  * Add `docker-compose.yaml` in the root path to launch both these apps. be sure to provide `API_URL=http://fastapi:8000` in the streamlit app's environment. 
+
+
+Once you have launched both the apps, you should be able to access streamlit web ui and make predictions. 
+
+You could also test predictions with FastAPI directly using 
+
+```
+curl -X POST "http://localhost:8000/predict" \
+-H "Content-Type: application/json" \
+-d '{
+  "sqft": 1500,
+  "bedrooms": 3,
+  "bathrooms": 2,
+  "location": "suburban",
+  "year_built": 2000,
+  "has_garage": true
+}'
+
+```
+
+Be sure to replace `http://localhost:8000/predict` with actual endpoint based on where its running. 
+
+
 ## 🧠 Learn More About MLOps
 
 This project is part of the [**MLOps Bootcamp**](https://schoolofdevops.com) at School of DevOps, where you'll learn how to:
