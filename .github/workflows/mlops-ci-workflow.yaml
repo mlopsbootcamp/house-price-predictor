@@ -73,6 +73,6 @@ jobs:
         uses: docker/build-push-action@v7
         with:
           push: true
-          tags: cakesmith/fastapi:{{ github.sha }}
+          tags: cakesmith/fastapi:${{ github.sha }}
           context: "."
           file: "Dockerfile"
