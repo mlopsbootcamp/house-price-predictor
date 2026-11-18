@@ -1,0 +1,6 @@
+[theme]
+primaryColor = "#A288B3"  # Set the primary color (e.g., slider, buttons)
+backgroundColor = "#F5F5F5"  # Set the background color
+secondaryBackgroundColor = "#FFFFFF"  # Set the sidebar background color
+textColor = "#333333"  # Set the text color
+font = "sans serif"  # Choose a font (e.g., "sans serif", "serif", "monospace")

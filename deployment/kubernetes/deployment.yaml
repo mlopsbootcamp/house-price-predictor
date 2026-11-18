@@ -1,0 +1,41 @@
+# deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: house-price-model
+  labels:
+    app: house-price-model
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: house-price-model
+  template:
+    metadata:
+      labels:
+        app: house-price-model
+    spec:
+      containers:
+      - name: model-api
+        image: house-price-model:1.0.0
+        ports:
+        - containerPort: 8000
+        resources:
+          limits:
+            cpu: "500m"
+            memory: "512Mi"
+          requests:
+            cpu: "200m"
+            memory: "256Mi"
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: 8000
+          initialDelaySeconds: 10
+          periodSeconds: 30
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 8000
+          initialDelaySeconds: 15
+          periodSeconds: 60
