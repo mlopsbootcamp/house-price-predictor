@@ -151,9 +151,8 @@ with col2:
         st.markdown("<p><strong>Top Factors Affecting Price:</strong></p>", unsafe_allow_html=True)
         st.markdown("""
         <ul>
-            <li>Square Footage (43% importance)</li>
-            <li>Location (27% importance)</li>
-            <li>Number of Bathrooms (15% importance)</li>
+            <li>Square Footage</li>
+            <li>Number of Bedrooms/Bathrooms</li>
         </ul>
         """, unsafe_allow_html=True)
         st.markdown('</div>', unsafe_allow_html=True)
