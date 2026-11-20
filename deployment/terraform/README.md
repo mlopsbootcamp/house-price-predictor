@@ -37,7 +37,9 @@ Terraform selects the region from `AWS_REGION`, then `AWS_DEFAULT_REGION`, then 
 
 Optionally pass `-var='aws_account_id=YOUR_ACCOUNT_ID'` to enforce an expected account ID.
 
-If the GitHub OIDC provider already exists in the account, pass `-var='github_oidc_provider_arn=YOUR_PROVIDER_ARN'` to the plan. Set `github_oidc_subject` if your repository uses GitHub's immutable subject format or another environment. Check the actual token claims before setting the trust policy.
+If the GitHub OIDC provider already exists in the account and is managed outside this Terraform state, pass `-var='github_oidc_provider_arn=YOUR_PROVIDER_ARN'` to the plan. The default `github_oidc_subject` uses GitHub's immutable owner and repository IDs for `cakesmith/house-price-predictor` and matches the `kthw-lab` environment. If you deploy from a different repository or environment, set `github_oidc_subject` to the exact `sub` claim issued for that job.
+
+If an existing role still trusts the old name-only subject and the job fails with `Not authorized to perform sts:AssumeRoleWithWebIdentity`, remove any override that sets the old subject, create a fresh Terraform plan, and apply it. The trust policy should update in place. Then rerun the failed deploy job in GitHub Actions.
 
 Install GitHub CLI on Debian or Ubuntu using GitHub’s official package repository:
 

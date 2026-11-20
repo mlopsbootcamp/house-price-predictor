@@ -37,6 +37,17 @@ build/
 dist/
 *.egg-info/
 
+# Ignore processed data
+data/processed/
+
 # Ignore all .pkl files (models, preprocessors, etc.)
 *.pkl
 
+
+# Terraform local state, plans, and backend metadata
+.terraform/
+*.tfstate
+*.tfstate.*
+*.tfplan
+tfplan
+*.s3.tfbackend

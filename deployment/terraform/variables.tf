@@ -13,6 +13,7 @@ variable "github_oidc_provider_arn" {
   default = ""
 }
 variable "github_oidc_subject" {
+  description = "Exact GitHub Actions OIDC subject allowed to assume the deployment role"
   type = string
-  default = "repo:cakesmith/house-price-predictor:environment:kthw-lab"
+  default = "repo:cakesmith@4943196/house-price-predictor@1451739636:environment:kthw-lab"
 }
