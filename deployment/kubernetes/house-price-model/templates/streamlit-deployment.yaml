@@ -1,0 +1,41 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ .Release.Name }}-streamlit
+  labels:
+    app.kubernetes.io/name: {{ .Chart.Name }}
+    app.kubernetes.io/instance: {{ .Release.Name }}
+    app.kubernetes.io/component: streamlit
+    app.kubernetes.io/managed-by: {{ .Release.Service }}
+spec:
+  replicas: {{ .Values.streamlit.replicaCount }}
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: {{ .Chart.Name }}
+      app.kubernetes.io/instance: {{ .Release.Name }}
+      app.kubernetes.io/component: streamlit
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: {{ .Chart.Name }}
+        app.kubernetes.io/instance: {{ .Release.Name }}
+        app.kubernetes.io/component: streamlit
+    spec:
+      enableServiceLinks: true
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      containers:
+        - name: streamlit
+          image: {{ printf "%s:%s" .Values.streamlit.image.repository .Values.streamlit.image.tag | quote }}
+          imagePullPolicy: {{ .Values.streamlit.image.pullPolicy }}
+          env:
+            - name: API_URL
+              value: {{ printf "http://$(%s_API_SERVICE_HOST):%v" (.Release.Name | upper | replace "-" "_") .Values.api.service.port | quote }}
+          ports:
+            - name: http
+              containerPort: 8501
+          readinessProbe:
+            tcpSocket:
+              port: http

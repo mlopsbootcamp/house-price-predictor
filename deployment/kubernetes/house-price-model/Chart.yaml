@@ -1,0 +1,6 @@
+apiVersion: v2
+name: house-price-model
+description: FastAPI inference service and Streamlit UI for the house price predictor
+type: application
+version: 0.1.1
+appVersion: "e11e73e"

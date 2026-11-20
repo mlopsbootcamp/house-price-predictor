@@ -147,6 +147,7 @@ jobs:
           curl -f http://localhost:8000/health && break || sleep 5;
         done
         docker logs test-api
+        curl -fsS http://localhost:8000/health
 
     - name: Clean up Test Container
       run: |
@@ -166,3 +167,58 @@ jobs:
         docker tag docker.io/${{ vars.DOCKERHUB_USERNAME }}/house-price-model:$COMMIT_HASH docker.io/${{ vars.DOCKERHUB_USERNAME }}/house-price-model:latest
         docker push docker.io/${{ vars.DOCKERHUB_USERNAME }}/house-price-model:$COMMIT_HASH
         docker push docker.io/${{ vars.DOCKERHUB_USERNAME }}/house-price-model:latest
+
+  deploy:
+    needs: build-and-publish
+    runs-on: ubuntu-24.04
+    environment: kthw-lab
+    permissions:
+      contents: read
+      id-token: write
+    concurrency:
+      group: house-price-deploy
+      cancel-in-progress: false
+    steps:
+    - uses: actions/checkout@v7
+    - name: Configure AWS credentials
+      uses: aws-actions/configure-aws-credentials@v6
+      with:
+        role-to-assume: ${{ vars.KTHW_DEPLOY_ROLE_ARN }}
+        aws-region: ${{ vars.KTHW_AWS_REGION }}
+    - name: Find running jumpbox
+      id: jumpbox
+      run: |
+        instances=$(aws ec2 describe-instances --filters 'Name=tag:Name,Values=jumpbox' 'Name=tag:ManagedBy,Values=kubernetes-hard-way' 'Name=instance-state-name,Values=running' --query 'Reservations[].Instances[].InstanceId' --output text)
+        count=$(wc -w <<< "$instances")
+        if [ "$count" -gt 1 ]; then
+          echo "Multiple running jumpboxes found" >&2
+          exit 1
+        fi
+        echo "instance=$instances" >> "$GITHUB_OUTPUT"
+        if [ "$count" -eq 0 ]; then
+          echo "Cluster jumpbox is stopped or absent; deployment skipped." >> "$GITHUB_STEP_SUMMARY"
+        fi
+    - name: Deploy Helm release
+      if: steps.jumpbox.outputs.instance != ''
+      env:
+        JUMPBOX: ${{ steps.jumpbox.outputs.instance }}
+        KUBECONFIG_CONTENT: ${{ secrets.KTHW_DEPLOY_KUBECONFIG }}
+        IMAGE_REPOSITORY: docker.io/${{ vars.DOCKERHUB_USERNAME }}/house-price-model
+      run: |
+        set -euo pipefail
+        umask 077
+        export KUBECONFIG="$RUNNER_TEMP/kubeconfig"
+        printf '%s' "$KUBECONFIG_CONTENT" > "$KUBECONFIG"
+        aws ssm start-session --target "$JUMPBOX" --document-name house-price-kubernetes-api > "$RUNNER_TEMP/ssm.log" 2>&1 &
+        tunnel_pid=$!
+        trap 'kill "$tunnel_pid" 2>/dev/null || true; rm -f "$KUBECONFIG"' EXIT
+        for attempt in {1..30}; do
+          if (echo > /dev/tcp/127.0.0.1/16443) 2>/dev/null; then break; fi
+          if ! kill -0 "$tunnel_pid" 2>/dev/null; then cat "$RUNNER_TEMP/ssm.log"; exit 1; fi
+          sleep 1
+        done
+        kubectl --request-timeout=10s get --raw=/version >/dev/null
+        helm upgrade --install house-price ./deployment/kubernetes/house-price-model \
+          --namespace house-price --wait --timeout 5m \
+          --set-string "api.image.repository=$IMAGE_REPOSITORY" \
+          --set-string "api.image.tag=${GITHUB_SHA:0:7}"

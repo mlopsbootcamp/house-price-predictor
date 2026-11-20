@@ -1,0 +1,20 @@
+imagePullSecrets: []
+
+api:
+  replicaCount: 1
+  image:
+    repository: docker.io/cakesmith/house-price-model
+    # An empty tag uses appVersion from Chart.yaml.
+    tag: ""
+    pullPolicy: IfNotPresent
+  service:
+    port: 8000
+
+streamlit:
+  replicaCount: 1
+  image:
+    repository: docker.io/cakesmith/streamlit
+    tag: "dev"
+    pullPolicy: Always
+  service:
+    port: 8501
