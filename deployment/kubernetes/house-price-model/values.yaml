@@ -6,6 +6,8 @@ api:
     repository: docker.io/cakesmith/house-price-model
     # An empty tag uses appVersion from Chart.yaml.
     tag: ""
+    # When set, use this digest in place of the tag.
+    digest: ""
     pullPolicy: IfNotPresent
   service:
     port: 8000
@@ -15,6 +17,8 @@ streamlit:
   image:
     repository: docker.io/cakesmith/streamlit
     tag: "dev"
+    # When set, use this digest in place of the tag.
+    digest: ""
     pullPolicy: Always
   service:
     port: 8501

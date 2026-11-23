@@ -46,3 +46,20 @@ For an image from the [manual CI workflow](../../.github/workflows/mlops-ci-work
 set `api.image.repository=docker.io/cakesmith/fastapi` and use the full
 commit SHA as `api.image.tag`. Set `streamlit.image.tag` to select another
 published UI tag.
+
+## Kubernetes The Hard Way GitOps deployment
+
+Argo CD reconciles the `house-price` release in the `house-price` namespace
+using [values-kthw-lab.yaml](house-price-model/values-kthw-lab.yaml). The
+chart accepts an image digest or a tag. The lab pins both images by digest.
+
+The [MLOps workflow](../../.github/workflows/mlops-pipeline.yaml) builds and
+tests the API image with a real prediction request, then publishes the image.
+A release or a full workflow run promotes the tested digest to the lab. The
+manual `run_deploy` option can also promote a published image for the selected
+commit, including older images tagged with a seven-character commit SHA.
+
+The promotion job uses its GitHub token to validate the prospective commit on
+a temporary branch. It advances `main` after the required **Validate lab Helm
+chart** check passes. Argo CD applies that Git revision when the lab is
+online. Revert the promotion commit in Git to restore the prior digest.

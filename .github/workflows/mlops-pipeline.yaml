@@ -30,12 +30,15 @@ on:
         required: false
         default: false
       run_deploy:
-        description: 'Deploy the published image for this commit to Kubernetes'
+        description: 'Promote the published image for this commit to the Kubernetes lab'
         type: boolean
         required: false
         default: false
   release:
     types: [created]
+
+permissions:
+  contents: read
 
 
 jobs:
@@ -137,6 +140,10 @@ jobs:
     if: github.event_name == 'release' || inputs.run_all || inputs.run_build || inputs.run_publish
     needs: model-training
     runs-on: ubuntu-latest
+    outputs:
+      digest: ${{ steps.publish.outputs.digest }}
+    env:
+      IMAGE_REPOSITORY: docker.io/${{ vars.DOCKERHUB_USERNAME }}/house-price-model
     
     steps:
     - name: Checkout code
@@ -159,20 +166,11 @@ jobs:
       
     - name: Build and test Docker image
       run: |
-        COMMIT_HASH=$(echo ${{ github.sha }} | cut -c1-7)
-        docker build -t docker.io/${{ vars.DOCKERHUB_USERNAME }}/house-price-model:$COMMIT_HASH -f Dockerfile .
-        docker run -d -p 8000:8000 --name test-api docker.io/${{ vars.DOCKERHUB_USERNAME }}/house-price-model:$COMMIT_HASH
-        for i in {1..10}; do
-          curl -f http://localhost:8000/health && break || sleep 5;
-        done
-        docker logs test-api
-        curl -fsS http://localhost:8000/health
+        set -euo pipefail
+        image="$IMAGE_REPOSITORY:$GITHUB_SHA"
+        docker build --tag "$image" --file Dockerfile .
+        deployment/kubernetes/scripts/check-api-image.sh "$image"
 
-    - name: Clean up Test Container
-      run: |
-        docker stop test-api || true
-        docker rm test-api || true
-      
     - name: Log in to Docker Hub
       if: github.event_name == 'release' || inputs.run_all || inputs.run_publish
       uses: docker/login-action@v4
@@ -180,18 +178,25 @@ jobs:
         registry: docker.io
         username: ${{ vars.DOCKERHUB_USERNAME }}
         password: ${{ secrets.DOCKERHUB_TOKEN }}
-     
-    - name: Push Docker image to DockerHub
+
+    - name: Push tested Docker image
+      id: publish
       if: github.event_name == 'release' || inputs.run_all || inputs.run_publish
       run: |
-        COMMIT_HASH=$(echo ${{ github.sha }} | cut -c1-7)
-        docker tag docker.io/${{ vars.DOCKERHUB_USERNAME }}/house-price-model:$COMMIT_HASH docker.io/${{ vars.DOCKERHUB_USERNAME }}/house-price-model:latest
-        docker push docker.io/${{ vars.DOCKERHUB_USERNAME }}/house-price-model:$COMMIT_HASH
-        docker push docker.io/${{ vars.DOCKERHUB_USERNAME }}/house-price-model:latest
+        set -euo pipefail
+        image="$IMAGE_REPOSITORY:$GITHUB_SHA"
+        docker push "$image" | tee "$RUNNER_TEMP/image-push.log"
+        digest=$(awk '/digest: sha256:/ { print $3 }' "$RUNNER_TEMP/image-push.log")
+        [[ $digest =~ ^sha256:[0-9a-f]{64}$ ]]
+        for tag in "${GITHUB_SHA:0:7}" latest; do
+          docker tag "$image" "$IMAGE_REPOSITORY:$tag"
+          docker push "$IMAGE_REPOSITORY:$tag"
+        done
+        printf 'digest=%s\n' "$digest" >> "$GITHUB_OUTPUT"
 
-  deploy:
+  promote:
     needs: build-and-publish
-    # A deploy-only run can use a published image when the build was never requested.
+    # A promote-only run can use an existing image from the selected commit.
     if: >-
       ${{ !cancelled() &&
           (github.event_name == 'release' || inputs.run_all || inputs.run_deploy) &&
@@ -201,63 +206,35 @@ jobs:
     runs-on: ubuntu-24.04
     environment: kthw-lab
     permissions:
-      contents: read
-      id-token: write
+      contents: write
+      actions: write
     concurrency:
       group: house-price-deploy
       cancel-in-progress: false
     env:
       IMAGE_REPOSITORY: docker.io/${{ vars.DOCKERHUB_USERNAME }}/house-price-model
+      PUBLISHED_DIGEST: ${{ needs.build-and-publish.outputs.digest }}
+      GH_TOKEN: ${{ github.token }}
     steps:
     - uses: actions/checkout@v7
-    - name: Configure AWS credentials
-      uses: aws-actions/configure-aws-credentials@v6
       with:
-        role-to-assume: ${{ vars.KTHW_DEPLOY_ROLE_ARN }}
-        aws-region: ${{ vars.KTHW_AWS_REGION }}
-    - name: Find running jumpbox
-      id: jumpbox
-      run: |
-        instances=$(aws ec2 describe-instances --filters 'Name=tag:Name,Values=jumpbox' 'Name=tag:ManagedBy,Values=kubernetes-hard-way' 'Name=instance-state-name,Values=running' --query 'Reservations[].Instances[].InstanceId' --output text)
-        count=$(wc -w <<< "$instances")
-        if [ "$count" -gt 1 ]; then
-          echo "Multiple running jumpboxes found" >&2
-          exit 1
-        fi
-        echo "instance=$instances" >> "$GITHUB_OUTPUT"
-        if [ "$count" -eq 0 ]; then
-          echo "Cluster jumpbox is stopped or absent; deployment skipped." >> "$GITHUB_STEP_SUMMARY"
-        fi
-    - name: Verify published image
-      if: >-
-        steps.jumpbox.outputs.instance != '' && github.event_name == 'workflow_dispatch' &&
-        !inputs.run_all && !inputs.run_publish
-      run: |
-        image="$IMAGE_REPOSITORY:${GITHUB_SHA:0:7}"
-        if ! docker manifest inspect "$image" >/dev/null; then
-          echo "::error::Could not verify $image on Docker Hub. Publish the image for this commit before deploying."
-          exit 1
-        fi
-    - name: Deploy Helm release
-      if: steps.jumpbox.outputs.instance != ''
-      env:
-        JUMPBOX: ${{ steps.jumpbox.outputs.instance }}
-        KUBECONFIG_CONTENT: ${{ secrets.KTHW_DEPLOY_KUBECONFIG }}
+        ref: main
+    - name: Resolve and test an existing image for manual promotion
+      id: existing
+      if: needs.build-and-publish.outputs.digest == ''
       run: |
         set -euo pipefail
-        umask 077
-        export KUBECONFIG="$RUNNER_TEMP/kubeconfig"
-        printf '%s' "$KUBECONFIG_CONTENT" > "$KUBECONFIG"
-        aws ssm start-session --target "$JUMPBOX" --document-name house-price-kubernetes-api > "$RUNNER_TEMP/ssm.log" 2>&1 &
-        tunnel_pid=$!
-        trap 'kill "$tunnel_pid" 2>/dev/null || true; rm -f "$KUBECONFIG"' EXIT
-        for attempt in {1..30}; do
-          if (echo > /dev/tcp/127.0.0.1/16443) 2>/dev/null; then break; fi
-          if ! kill -0 "$tunnel_pid" 2>/dev/null; then cat "$RUNNER_TEMP/ssm.log"; exit 1; fi
-          sleep 1
-        done
-        kubectl --request-timeout=10s get --raw=/version >/dev/null
-        helm upgrade --install house-price ./deployment/kubernetes/house-price-model \
-          --namespace house-price --wait --timeout 5m \
-          --set-string "api.image.repository=$IMAGE_REPOSITORY" \
-          --set-string "api.image.tag=${GITHUB_SHA:0:7}"
+        image="$IMAGE_REPOSITORY:$GITHUB_SHA"
+        if ! docker manifest inspect "$image" >/dev/null 2>&1; then
+          image="$IMAGE_REPOSITORY:${GITHUB_SHA:0:7}"
+        fi
+        docker pull "$image"
+        pinned_image=$(docker image inspect "$image" --format '{{index .RepoDigests 0}}')
+        digest=${pinned_image##*@}
+        [[ $digest =~ ^sha256:[0-9a-f]{64}$ ]]
+        deployment/kubernetes/scripts/check-api-image.sh "$IMAGE_REPOSITORY@$digest"
+        printf 'digest=%s\n' "$digest" >> "$GITHUB_OUTPUT"
+    - name: Promote tested image through Git
+      env:
+        EXISTING_DIGEST: ${{ steps.existing.outputs.digest }}
+      run: deployment/kubernetes/scripts/promote-lab-image.sh "$IMAGE_REPOSITORY" "${PUBLISHED_DIGEST:-$EXISTING_DIGEST}"
