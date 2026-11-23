@@ -1,7 +1,7 @@
 api:
   image:
     repository: docker.io/cakesmith/house-price-model
-    digest: sha256:969d888fc2059aacb210e6639e61930d34a6083fbcf1f50a3a18a37602ed057c
+    digest: sha256:c8b8e8043495d037e87cd524a1b8a377616d869a4b864e7e19e574c0f34cc2ef
 streamlit:
   image:
     repository: docker.io/cakesmith/streamlit
