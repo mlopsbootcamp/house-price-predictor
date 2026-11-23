@@ -30,10 +30,14 @@ on:
         required: false
         default: false
       run_deploy:
-        description: 'Promote the published image for this commit to the Kubernetes lab'
+        description: 'Promote a published API image to the Kubernetes lab'
         type: boolean
         required: false
         default: false
+      deploy_image:
+        description: 'Published API tag or sha256 digest. Enable run_deploy and turn off other options.'
+        type: string
+        required: false
   release:
     types: [created]
 
@@ -44,8 +48,9 @@ permissions:
 jobs:
   data-processing:
     if: >-
-      github.event_name == 'release' || inputs.run_all ||
-      inputs.run_data_processing || inputs.run_model_training || inputs.run_build || inputs.run_publish
+      github.event_name == 'release' ||
+      (!inputs.deploy_image && (inputs.run_all || inputs.run_data_processing ||
+      inputs.run_model_training || inputs.run_build || inputs.run_publish))
     runs-on: ubuntu-latest
     
     steps:
@@ -196,13 +201,13 @@ jobs:
 
   promote:
     needs: build-and-publish
-    # A promote-only run can use an existing image from the selected commit.
+    # An explicit image skips the build path and is validated before use.
     if: >-
       ${{ !cancelled() &&
-          (github.event_name == 'release' || inputs.run_all || inputs.run_deploy) &&
+          (github.event_name == 'release' || inputs.run_all || inputs.run_deploy || inputs.deploy_image) &&
           (needs.build-and-publish.result == 'success' ||
            (needs.build-and-publish.result == 'skipped' && github.event_name == 'workflow_dispatch' &&
-            !inputs.run_all && !inputs.run_build && !inputs.run_publish)) }}
+            (inputs.deploy_image || (!inputs.run_all && !inputs.run_build && !inputs.run_publish)))) }}
     runs-on: ubuntu-24.04
     environment: kthw-lab
     permissions:
@@ -216,22 +221,47 @@ jobs:
       PUBLISHED_DIGEST: ${{ needs.build-and-publish.outputs.digest }}
       GH_TOKEN: ${{ github.token }}
     steps:
+    - name: Check deploy-only options
+      if: >-
+        inputs.deploy_image && (!inputs.run_deploy || inputs.run_all ||
+        inputs.run_data_processing || inputs.run_model_training || inputs.run_build || inputs.run_publish)
+      run: |
+        echo '::error::To use deploy_image, enable run_deploy and turn off all other run options.'
+        exit 1
     - uses: actions/checkout@v7
       with:
         ref: main
     - name: Resolve and test an existing image for manual promotion
       id: existing
       if: needs.build-and-publish.outputs.digest == ''
+      env:
+        DEPLOY_IMAGE: ${{ inputs.deploy_image }}
       run: |
         set -euo pipefail
-        image="$IMAGE_REPOSITORY:$GITHUB_SHA"
-        if ! docker manifest inspect "$image" >/dev/null 2>&1; then
-          image="$IMAGE_REPOSITORY:${GITHUB_SHA:0:7}"
+        if [[ $DEPLOY_IMAGE =~ ^sha256:[0-9a-f]{64}$ ]]; then
+          digest=$DEPLOY_IMAGE
+          image="$IMAGE_REPOSITORY@$digest"
+        elif [[ $DEPLOY_IMAGE =~ ^[a-zA-Z0-9_][a-zA-Z0-9_.-]{0,127}$ ]]; then
+          image="$IMAGE_REPOSITORY:$DEPLOY_IMAGE"
+        elif [[ -z $DEPLOY_IMAGE ]]; then
+          image="$IMAGE_REPOSITORY:$GITHUB_SHA"
+          if ! docker manifest inspect "$image" >/dev/null 2>&1; then
+            image="$IMAGE_REPOSITORY:${GITHUB_SHA:0:7}"
+          fi
+        else
+          echo '::error::deploy_image must be a Docker tag or a sha256 digest for the configured API image repository.'
+          exit 1
         fi
-        docker pull "$image"
-        pinned_image=$(docker image inspect "$image" --format '{{index .RepoDigests 0}}')
-        digest=${pinned_image##*@}
-        [[ $digest =~ ^sha256:[0-9a-f]{64}$ ]]
+
+        if ! docker pull "$image"; then
+          printf '::error::Could not pull %s. Set deploy_image to an existing tag or digest.\n' "$image"
+          exit 1
+        fi
+        if [[ -z ${digest:-} ]]; then
+          pinned_image=$(docker image inspect "$image" --format '{{index .RepoDigests 0}}')
+          digest=${pinned_image##*@}
+          [[ $digest =~ ^sha256:[0-9a-f]{64}$ ]]
+        fi
         deployment/kubernetes/scripts/check-api-image.sh "$IMAGE_REPOSITORY@$digest"
         printf 'digest=%s\n' "$digest" >> "$GITHUB_OUTPUT"
     - name: Promote tested image through Git

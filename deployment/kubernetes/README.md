@@ -56,8 +56,12 @@ chart accepts an image digest or a tag. The lab pins both images by digest.
 The [MLOps workflow](../../.github/workflows/mlops-pipeline.yaml) builds and
 tests the API image with a real prediction request, then publishes the image.
 A release or a full workflow run promotes the tested digest to the lab. The
-manual `run_deploy` option can also promote a published image for the selected
-commit, including older images tagged with a seven-character commit SHA.
+manual `run_deploy` option can also promote an already-published API image
+from `main`. Enable `run_deploy`, turn off `run_all` and the other run options,
+and enter a Docker Hub tag or a `sha256:…` digest in `deploy_image`. Supply the
+tag or digest alone. The workflow uses the configured API image repository,
+tests the image, and records its immutable digest. Leaving `deploy_image`
+blank looks for an image tagged with the selected commit SHA.
 
 The promotion job uses its GitHub token to validate the prospective commit on
 a temporary branch. It advances `main` after the required **Validate lab Helm
