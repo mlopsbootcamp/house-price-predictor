@@ -63,3 +63,8 @@ The promotion job uses its GitHub token to validate the prospective commit on
 a temporary branch. It advances `main` after the required **Validate lab Helm
 chart** check passes. Argo CD applies that Git revision when the lab is
 online. Revert the promotion commit in Git to restore the prior digest.
+
+Configure the repository's `DOCKERHUB_USERNAME` variable and
+`DOCKERHUB_TOKEN` secret for publishing. The promotion workflow runs in the
+`kthw-lab` GitHub environment. Its deployment policy permits `main` and
+release tags matching `v*.*.*`.
