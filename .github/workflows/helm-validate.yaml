@@ -20,3 +20,19 @@ jobs:
           persist-credentials: false
       - name: Lint and render the lab chart
         run: deployment/kubernetes/scripts/validate-lab-chart.sh
+
+  report-promotion:
+    name: Report promotion status
+    if: github.event_name == 'workflow_dispatch'
+    needs: validate
+    runs-on: ubuntu-24.04
+    permissions:
+      statuses: write
+    steps:
+      - name: Record Helm validation for the protected branch
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh api --method POST "repos/$GITHUB_REPOSITORY/statuses/$GITHUB_SHA" \
+            -f state=success -f 'context=Validate lab Helm chart' \
+            -f "target_url=$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID" >/dev/null
