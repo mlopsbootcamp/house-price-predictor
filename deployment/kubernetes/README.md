@@ -53,11 +53,22 @@ Argo CD reconciles the `house-price` release in the `house-price` namespace
 using [values-kthw-lab.yaml](house-price-model/values-kthw-lab.yaml). The
 chart accepts an image digest or a tag. The lab pins both images by digest.
 
-The [MLOps workflow](../../.github/workflows/mlops-pipeline.yaml) builds and
-tests the API image with a real prediction request, then publishes the image.
-A release or a full workflow run promotes the tested digest to the lab. The
-manual `run_deploy` option can also promote an already-published API image
-from `main`. Enable `run_deploy`, turn off `run_all` and the other run options,
+The [MLOps workflow](../../.github/workflows/mlops-pipeline.yaml) processes
+data, trains the model, builds the API image, and smoke-tests a prediction
+when a PR targeting `main` opens, reopens, or gets new commits. PR runs use
+read-only GitHub permissions and skip publishing and lab promotion. The
+separate Helm workflow validates the chart.
+
+A push to `main` that changes the API build, data, model inputs, or pipeline
+runs the same checks, publishes the tested image to Docker Hub, and promotes
+its digest to the lab. This includes merged PRs. Wait for promotion, then tag
+the commit on `main` whose lab values pin the image you intend to release. A
+pushed stable version tag such as `v1.2.3` gives that digest the corresponding
+Docker Hub tag. A GitHub Release can use the same Git tag.
+
+Manual runs still support retraining, building and publishing images, and
+promoting an already-published image from `main`. For a deploy-only run, enable
+`run_deploy`, turn off `run_all` and the other run options,
 and enter a Docker Hub tag or a `sha256:…` digest in `deploy_image`. Supply the
 tag or digest alone. The workflow uses the configured API image repository,
 tests the image, and records its immutable digest. Leaving `deploy_image`
@@ -70,5 +81,4 @@ online. Revert the promotion commit in Git to restore the prior digest.
 
 Configure the repository's `DOCKERHUB_USERNAME` variable and
 `DOCKERHUB_TOKEN` secret for publishing. The promotion workflow runs in the
-`kthw-lab` GitHub environment. Its deployment policy permits `main` and
-release tags matching `v*.*.*`.
+`kthw-lab` GitHub environment. Automatic promotions run from `main`.
