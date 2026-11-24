@@ -228,6 +228,7 @@ jobs:
         printf 'digest=%s\n' "$digest" >> "$GITHUB_OUTPUT"
 
   promote:
+    name: Promote house-price API to the Kubernetes lab
     needs: build-and-publish
     # An explicit image skips the build path and is validated before use.
     if: >-
@@ -250,17 +251,18 @@ jobs:
       PUBLISHED_DIGEST: ${{ needs.build-and-publish.outputs.digest }}
       GH_TOKEN: ${{ github.token }}
     steps:
-    - name: Check deploy-only options
+    - name: Validate manual promotion options
       if: >-
         inputs.deploy_image && (!inputs.run_deploy || inputs.run_all ||
         inputs.run_data_processing || inputs.run_model_training || inputs.run_build || inputs.run_publish)
       run: |
         echo '::error::To use deploy_image, enable run_deploy and turn off all other run options.'
         exit 1
-    - uses: actions/checkout@v7
+    - name: Check out main for the lab configuration update
+      uses: actions/checkout@v7
       with:
         ref: main
-    - name: Resolve and test an existing image for manual promotion
+    - name: Resolve the published image and smoke-test a prediction
       id: existing
       if: needs.build-and-publish.outputs.digest == ''
       env:
@@ -282,6 +284,7 @@ jobs:
           exit 1
         fi
 
+        printf 'Pulling the published image %s.\n' "$image"
         if ! docker pull "$image"; then
           printf '::error::Could not pull %s. Set deploy_image to an existing tag or digest.\n' "$image"
           exit 1
@@ -291,12 +294,21 @@ jobs:
           digest=${pinned_image##*@}
           [[ $digest =~ ^sha256:[0-9a-f]{64}$ ]]
         fi
+        printf 'Smoke-testing the API at %s@%s.\n' "$IMAGE_REPOSITORY" "$digest"
         deployment/kubernetes/scripts/check-api-image.sh "$IMAGE_REPOSITORY@$digest"
         printf 'digest=%s\n' "$digest" >> "$GITHUB_OUTPUT"
-    - name: Promote tested image through Git
+    - name: Pin the tested digest, validate Helm, and update main
       env:
         EXISTING_DIGEST: ${{ steps.existing.outputs.digest }}
-      run: deployment/kubernetes/scripts/promote-lab-image.sh "$IMAGE_REPOSITORY" "${PUBLISHED_DIGEST:-$EXISTING_DIGEST}"
+      run: |
+        if [[ -n $PUBLISHED_DIGEST ]]; then
+          source='Built, smoke-tested, and published by this pipeline run.'
+        else
+          source='Pulled from Docker Hub and smoke-tested by this promotion job.'
+        fi
+        printf 'Image source: %s\n' "$source"
+        printf '## Kubernetes lab promotion\n\n- Image source: %s\n' "$source" >> "$GITHUB_STEP_SUMMARY"
+        deployment/kubernetes/scripts/promote-lab-image.sh "$IMAGE_REPOSITORY" "${PUBLISHED_DIGEST:-$EXISTING_DIGEST}"
 
   publish-version:
     if: github.event_name == 'push' && github.ref_type == 'tag' && !github.event.deleted
